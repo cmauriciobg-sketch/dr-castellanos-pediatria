@@ -96,20 +96,30 @@
   function albumView() {
     const cards = state.social?.inventory || [];
     const topic = state.albumTopic || TOPICS[0].id;
-    const own = cards.filter(card => card.topic === topic);
+    const inventory = new Map(cards.map(card => [card.id, card]));
+    // El catálogo siempre contiene las 20 piezas del tema, incluso antes de que
+    // el usuario haya desbloqueado alguna. Así la vista editorial no depende de
+    // que la sincronización haya terminado de poblar el inventario.
+    const own = allCards().filter(card => card.topic === topic).map(card => ({ ...card, ...(inventory.get(card.id) || {}), quantity: Number(inventory.get(card.id)?.quantity || 0) }));
     const collected = own.filter(card => card.quantity > 0).length;
     const duplicates = cards.filter(card => card.quantity > 1);
     const recipients = (state.social?.leaderboard || []).filter(u => u.id !== socialProfile().cloud.userId);
     const missing = cards.filter(card => !card.quantity);
-    const cardMarkup = own.length ? own.map(card => ferchyCardMarkup(card, recipients)).join('') : '<p class="social-empty">Tu álbum se llenará al completar cuestionarios con tu cuenta.</p>';
+    const preview = !!state.albumPreview;
+    const cardMarkup = own.map(card => ferchyCardMarkup(card, recipients, preview)).join('');
     const topicTabs = TOPICS.map(t => `<button class="${t.id === topic ? 'active' : ''}" data-album-topic="${t.id}">${esc(t.short)}</button>`).join('');
     const selectCard = items => items.map(c => `<option value="${c.id}">${esc(c.title)} · ${RARITY[c.rarity].label}</option>`).join('');
-    return `<section class="panel"><div class="section-head" style="margin:0"><div><span class="eyebrow">Ferchy Cards</span><h2>Álbum de estudio</h2><p>Cada tema tiene 20 cartas: 12 comunes, 6 normales y 2 raras de arte dorado, disponibles solo en nivel alto.</p></div><button class="btn ghost" id="refreshSocial">Actualizar</button></div><div class="social-tabs" style="margin-top:16px">${topicTabs}</div><div class="album-summary"><article class="stat"><strong>${collected}/20</strong><span>cartas de este tema</span></article><article class="stat"><strong>${duplicates.reduce((n,c) => n + c.quantity - 1, 0)}</strong><span>repetidas para compartir</span></article><article class="stat"><strong>${cards.filter(c => c.rarity === 'rare' && c.quantity > 0).length}/10</strong><span>raras doradas</span></article></div><div class="card-grid">${cardMarkup}</div>${recipients.length && duplicates.length ? `<section class="panel" style="margin-top:18px"><h3>Intercambio amistoso</h3><p style="margin-top:6px;color:var(--muted);font-size:13px">Ofrece una repetida y solicita una carta que aún te falte. La otra persona decide si acepta.</p><div class="trade-grid"><label>Compañero<select id="tradeTarget">${recipients.map(u => `<option value="${u.id}">${esc(u.display_name)}</option>`).join('')}</select></label><label>Entregas<select id="tradeOffer">${selectCard(duplicates)}</select></label><label>Solicitas<select id="tradeRequest">${selectCard(missing.length ? missing : cards)}</select></label><button class="btn primary" id="offerTrade">Proponer</button></div>${tradeOffersMarkup()}</section>` : ''}${giftAndTradeInbox()}</section>`;
+    return `<section class="panel"><div class="section-head" style="margin:0"><div><span class="eyebrow">Ferchy Cards</span><h2>Álbum de estudio</h2><p>Cada tema tiene 20 cartas: 12 comunes, 6 normales y 2 raras de arte dorado, disponibles solo en nivel alto.</p></div><button class="btn ghost" id="refreshSocial">Actualizar</button></div><div class="social-tabs" style="margin-top:16px">${topicTabs}</div><div class="album-summary"><article class="stat"><strong>${collected}/20</strong><span>cartas de este tema</span></article><article class="stat"><strong>${duplicates.reduce((n,c) => n + c.quantity - 1, 0)}</strong><span>repetidas para compartir</span></article><article class="stat"><strong>${cards.filter(c => c.rarity === 'rare' && c.quantity > 0).length}/10</strong><span>raras doradas</span></article></div><section class="art-preview-note"><div><span class="eyebrow">Galería editorial</span><h3>${preview ? 'Todos los artes están visibles' : '¿Quieres revisar los artes?'}</h3><p>${preview ? 'Esta vista previa no desbloquea ni modifica tu inventario.' : 'Mira el diseño de las 20 cartas del tema sin revelar cuáles posees.'}</p></div><button class="btn ${preview ? 'ghost' : 'primary'}" id="toggleAlbumPreview">${preview ? 'Ocultar artes' : 'Ver todos los artes'}</button></section><div class="card-grid ${preview ? 'art-showcase' : ''}">${cardMarkup}</div>${recipients.length && duplicates.length ? `<section class="panel" style="margin-top:18px"><h3>Intercambio amistoso</h3><p style="margin-top:6px;color:var(--muted);font-size:13px">Ofrece una repetida y solicita una carta que aún te falte. La otra persona decide si acepta.</p><div class="trade-grid"><label>Compañero<select id="tradeTarget">${recipients.map(u => `<option value="${u.id}">${esc(u.display_name)}</option>`).join('')}</select></label><label>Entregas<select id="tradeOffer">${selectCard(duplicates)}</select></label><label>Solicitas<select id="tradeRequest">${selectCard(missing.length ? missing : cards)}</select></label><button class="btn primary" id="offerTrade">Proponer</button></div>${tradeOffersMarkup()}</section>` : ''}${giftAndTradeInbox()}</section>`;
   }
-  function ferchyCardMarkup(card, recipients) {
+  function cardArt(card) {
+    const topic = TOPICS.find(item => item.id === card.topic) || TOPICS[0];
+    return `<div class="card-art" aria-hidden="true"><span class="card-orbit orbit-a"></span><span class="card-orbit orbit-b"></span><b>${esc(topic.icon)}</b><i>${esc(card.emoji)}</i><small>Rabanitos</small></div>`;
+  }
+  function ferchyCardMarkup(card, recipients, preview = false) {
     const owned = card.quantity > 0;
-    const gift = card.quantity > 1 && recipients.length ? `<button class="card-gift" data-gift-card="${card.id}">Regalar repetida</button>` : '';
-    return `<article class="ferchy-card ${card.rarity} ${owned ? '' : 'locked'}"><span class="rarity">${owned ? RARITY[card.rarity].label : 'Por descubrir'}</span>${owned ? `<span class="card-emoji">${card.emoji}</span><h3>${esc(card.title)}</h3><p>${esc(card.message)}</p><span class="quantity">×${card.quantity}</span>${gift}` : '<span class="card-emoji">?</span><h3>Ferchy Card</h3><p>Completa cuestionarios para revelar esta carta.</p>'}</article>`;
+    const revealed = owned || preview;
+    const gift = owned && !preview && card.quantity > 1 && recipients.length ? `<button class="card-gift" data-gift-card="${card.id}">Regalar repetida</button>` : '';
+    return `<article class="ferchy-card ${card.rarity} ${revealed ? '' : 'locked'}"><span class="rarity">${revealed ? (preview && !owned ? 'Vista de arte · ' : '') + RARITY[card.rarity].label : 'Por descubrir'}</span>${revealed ? `${cardArt(card)}<h3>${esc(card.title)}</h3><p>${esc(card.message)}</p>${owned ? `<span class="quantity">×${card.quantity}</span>` : ''}${gift}` : '<span class="card-emoji">?</span><h3>Ferchy Card</h3><p>Completa cuestionarios para revelar esta carta.</p>'}</article>`;
   }
   function giftAndTradeInbox() {
     const gifts = state.social?.gifts || [];
@@ -231,6 +241,8 @@
     document.querySelectorAll('[data-social-tab]').forEach(button => button.onclick = () => { state.socialTab = button.dataset.socialTab; render(); });
     document.querySelectorAll('[data-rank-scope]').forEach(button => button.onclick = () => { state.rankScope = button.dataset.rankScope; state.socialLoaded = false; loadSocial(true); });
     document.querySelectorAll('[data-album-topic]').forEach(button => button.onclick = () => { state.albumTopic = button.dataset.albumTopic; render(); });
+    const togglePreview = document.querySelector('#toggleAlbumPreview');
+    if (togglePreview) togglePreview.onclick = () => { state.albumPreview = !state.albumPreview; render(); };
     document.querySelectorAll('[data-challenge]').forEach(button => button.onclick = () => createDuel(button.dataset.challenge));
     document.querySelectorAll('[data-accept-duel]').forEach(button => button.onclick = () => acceptDuel(button.dataset.acceptDuel));
     document.querySelectorAll('[data-play-duel]').forEach(button => button.onclick = () => playDuel(button.dataset.playDuel));
