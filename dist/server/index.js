@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env) {
-    const response = await env.ASSETS.fetch(request);
-    if (response.status !== 404) return response;
-    return env.ASSETS.fetch(new Request(new URL('/index.html', request.url)));
+    const url = new URL(request.url);
+    const assetPath = url.pathname === '/' ? '/dist/index.html' : `/dist${url.pathname}`;
+    return env.ASSETS.fetch(new Request(new URL(assetPath, url)));
   }
 };
