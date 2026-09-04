@@ -46,18 +46,19 @@
     const p = socialProfile();
     if (!p) return '<section class="page-head"><span class="eyebrow">Comunidad</span><h1>Aprende en compañía</h1><p>Los espacios sociales son opcionales: el estudio individual sigue siendo gratuito.</p></section>' + socialErrorMarkup();
     const tab = state.socialTab || 'ranking';
-    const content = state.socialLoading ? '<section class="panel"><p style="color:var(--muted)">Actualizando la comunidad…</p></section>' : (tab === 'ranking' ? rankingView() : tab === 'duels' ? duelsView() : tab === 'chat' ? chatView() : albumView());
-    return `<section class="page-head"><span class="eyebrow"><span class="online-dot"></span>Comunidad Rabanitos</span><h1>Aprende, reta y colecciona.</h1><p>Un ranking útil para orientarte, retos amistosos y Ferchy Cards para celebrar el hábito de estudio.</p></section><nav class="social-tabs" aria-label="Secciones de comunidad"><button data-social-tab="ranking" class="${tab === 'ranking' ? 'active' : ''}">Ranking</button><button data-social-tab="duels" class="${tab === 'duels' ? 'active' : ''}">Batallas VS</button><button data-social-tab="chat" class="${tab === 'chat' ? 'active' : ''}">Chat</button><button data-social-tab="album" class="${tab === 'album' ? 'active' : ''}">Álbum Ferchy</button></nav>${state.socialError ? `<p class="notice">${esc(state.socialError)}</p>` : ''}${content}`;
+    const content = state.socialLoading ? '<section class="panel"><p style="color:var(--muted)">Actualizando la comunidad…</p></section>' : (tab === 'ranking' ? rankingView() : tab === 'duels' ? duelsView() : tab === 'chat' ? chatView() : tab === 'friends' ? friendsView() : tab === 'profile' ? profileView() : albumView());
+    return `<section class="page-head"><span class="eyebrow"><span class="online-dot"></span>Comunidad Rabanitos</span><h1>Aprende, reta y colecciona.</h1><p>Un ranking útil para orientarte, retos amistosos y Ferchy Cards para celebrar el hábito de estudio.</p></section><nav class="social-tabs" aria-label="Secciones de comunidad"><button data-social-tab="ranking" class="${tab === 'ranking' ? 'active' : ''}">Ranking</button><button data-social-tab="friends" class="${tab === 'friends' ? 'active' : ''}">Amigos</button><button data-social-tab="duels" class="${tab === 'duels' ? 'active' : ''}">Batallas VS</button><button data-social-tab="chat" class="${tab === 'chat' ? 'active' : ''}">Chat</button><button data-social-tab="album" class="${tab === 'album' ? 'active' : ''}">Álbum Ferchy</button><button data-social-tab="profile" class="${tab === 'profile' ? 'active' : ''}">Mi ficha</button></nav>${state.socialError ? `<p class="notice">${esc(state.socialError)}</p>` : ''}${content}`;
   }
   function rankingView() {
     const rows = state.social?.leaderboard || [];
-    const duelTopic = state.duelTopic || TOPICS[0].id;
+    const duelTopic = state.duelTopic || TOPICS[0].id, scope = state.rankScope || 'all';
     const duelLevel = state.duelLevel || 'medio';
-    return `<section class="panel"><div class="section-head" style="margin:0"><div><span class="eyebrow">Tablero semanal</span><h2>Ranking de estudio</h2><p>Ordenado por XP; las medallas y rachas hacen visible la constancia.</p></div><button class="btn ghost" id="refreshSocial">Actualizar</button></div><div class="social-controls"><select id="duelTopic" aria-label="Tema del reto">${TOPICS.map(t => `<option value="${t.id}" ${t.id === duelTopic ? 'selected' : ''}>${esc(t.short)}</option>`).join('')}</select><select id="duelLevel" aria-label="Nivel del reto">${Object.entries(LEVELS).map(([id, level]) => `<option value="${id}" ${id === duelLevel ? 'selected' : ''}>${esc(level.name)}</option>`).join('')}</select><span class="tag">Reto: 10 preguntas · rapidez + precisión</span></div><div class="ranking-list">${rows.length ? rows.map((u, index) => rankingRow(u, index)).join('') : '<p class="social-empty">Aún no hay perfiles para comparar. Completa un cuestionario con tu cuenta.</p>'}</div></section>`;
+    return `<section class="panel"><div class="section-head" style="margin:0"><div><span class="eyebrow">Tablero semanal</span><h2>Ranking de estudio</h2><p>Ordenado por XP; las medallas y rachas hacen visible la constancia.</p></div><button class="btn ghost" id="refreshSocial">Actualizar</button></div><div class="social-tabs" style="margin-top:15px"><button data-rank-scope="all" class="${scope === 'all' ? 'active' : ''}">Comunidad</button><button data-rank-scope="friends" class="${scope === 'friends' ? 'active' : ''}">Solo amigos</button></div><div class="social-controls"><select id="duelTopic" aria-label="Tema del reto">${TOPICS.map(t => `<option value="${t.id}" ${t.id === duelTopic ? 'selected' : ''}>${esc(t.short)}</option>`).join('')}</select><select id="duelLevel" aria-label="Nivel del reto">${Object.entries(LEVELS).map(([id, level]) => `<option value="${id}" ${id === duelLevel ? 'selected' : ''}>${esc(level.name)}</option>`).join('')}</select><span class="tag">Reto: 10 preguntas · rapidez + precisión</span></div><div class="ranking-list">${rows.length ? rows.map((u, index) => rankingRow(u, index)).join('') : '<p class="social-empty">Aún no hay amigos en este tablero. Comparte tu código RAB para empezar.</p>'}</div></section>`;
   }
   function rankingRow(user, index) {
     const mine = user.id === socialProfile()?.cloud.userId;
-    return `<article class="ranking-row"><span class="rank-number ${index < 3 ? 'top' : ''}">${user.rank || index + 1}</span><div class="rank-user"><i class="avatar">${esc(user.avatar || '🩺')}</i><div><h3>${esc(user.display_name || 'Residente')}</h3><p>${mine ? 'Tu perfil' : 'Compañero de estudio'}</p></div></div><div class="rank-metrics"><span class="metric-pill">${user.xp || 0} XP</span><span class="metric-pill">🔥 ${user.streak_current || 0}</span><span class="metric-pill">🏅 ${user.medals || 0}</span>${mine ? '' : `<button class="btn ghost" data-challenge="${user.id}">Retar</button>`}</div></article>`;
+    const friendship = user.relationship === 'friend' ? '<span class="metric-pill">Amigo</span>' : user.relationship === 'outgoing' ? '<span class="metric-pill">Solicitud enviada</span>' : user.relationship === 'incoming' ? `<button class="btn primary" data-respond-friend="${user.id}" data-friend-accept="true">Aceptar</button><button class="btn ghost" data-respond-friend="${user.id}" data-friend-accept="false">Rechazar</button>` : `<button class="btn ghost" data-request-friend="${esc(user.friend_code || '')}">Agregar</button>`;
+    return `<article class="ranking-row"><span class="rank-number ${index < 3 ? 'top' : ''}">${user.rank || index + 1}</span><div class="rank-user"><i class="avatar">${esc(user.avatar || '🩺')}</i><div><h3>${esc(user.display_name || 'Residente')}</h3><p>${mine ? 'Tu perfil' : user.relationship === 'friend' ? 'Amigo de estudio' : 'Comunidad'}</p></div></div><div class="rank-metrics"><span class="metric-pill">${user.xp || 0} XP</span><span class="metric-pill">🔥 ${user.streak_current || 0}</span><span class="metric-pill">🏅 ${user.medals || 0}</span>${mine ? '' : friendship}${mine || user.relationship !== 'friend' ? '' : `<button class="btn ghost" data-challenge="${user.id}">Retar</button>`}</div></article>`;
   }
   function duelsView() {
     const duels = state.social?.duels || [];
@@ -72,6 +73,20 @@
     if (d.status === 'active') action = `<button class="btn primary" data-play-duel="${d.id}">Jugar ahora</button>`;
     const score = d.status === 'completed' ? `${d.host_name}: ${d.host_score ?? '—'} · ${d.opponent_name}: ${d.opponent_score ?? '—'}` : `${TOPICS.find(t => t.id === d.topic)?.short || d.topic} · ${LEVELS[d.level]?.name || d.level}`;
     return `<article class="duel-row"><span class="rank-number">⚔</span><div><h3>VS ${esc(otherName || 'residente')}</h3><p>${esc(score)}</p></div><div class="actions">${action}</div></article>`;
+  }
+  function friendsView() {
+    const connections = state.social?.connections || [], friends = connections.filter(x => x.relationship === 'friend'), incoming = connections.filter(x => x.relationship === 'incoming'), outgoing = connections.filter(x => x.relationship === 'outgoing'), blocked = state.social?.blocked || [];
+    const ownCode = profile().card?.friendCode || 'Generando…';
+    const rows = (items, mode) => items.length ? items.map(person => friendRow(person, mode)).join('') : '<p class="social-empty">Nada por aquí todavía.</p>';
+    return `<section class="panel"><span class="eyebrow">Tu código de amistad</span><h2 class="friend-code">${esc(ownCode)}</h2><p style="margin-top:7px;color:var(--muted)">Compártelo con quien quieras añadir. No contiene tu correo ni datos personales.</p><div class="social-controls"><input id="friendCodeInput" maxlength="10" placeholder="Ej. RAB-ABC123" aria-label="Código de amistad"><button class="btn primary" id="sendFriendRequest">Enviar solicitud</button></div></section><section class="panel"><div class="section-head" style="margin:0"><div><span class="eyebrow">Tu red</span><h2>${friends.length} amigo${friends.length === 1 ? '' : 's'} de estudio</h2></div><button class="btn ghost" id="refreshSocial">Actualizar</button></div><div class="duel-list" style="margin-top:14px">${rows(friends, 'friend')}</div></section><section class="panel"><h3>Solicitudes recibidas</h3><div class="duel-list" style="margin-top:12px">${rows(incoming, 'incoming')}</div>${outgoing.length ? `<p style="margin-top:13px;color:var(--muted);font-size:12px">${outgoing.length} solicitud${outgoing.length === 1 ? '' : 'es'} enviada${outgoing.length === 1 ? '' : 's'} esperando respuesta.</p>` : ''}</section><section class="panel"><h3>Cuentas bloqueadas</h3><p style="margin-top:5px;color:var(--muted);font-size:13px">Bloquear elimina la amistad y oculta toda interacción entre ambas cuentas.</p><div class="duel-list" style="margin-top:12px">${blocked.length ? blocked.map(person => `<article class="duel-row"><i class="avatar">${esc(person.avatar || '🩺')}</i><div><h3>${esc(person.display_name)}</h3><p>${esc(person.friend_code)}</p></div><div class="actions"><button class="btn ghost" data-unblock-user="${person.id}">Desbloquear</button></div></article>`).join('') : '<p class="social-empty">No has bloqueado a nadie.</p>'}</div></section>`;
+  }
+  function friendRow(person, mode) {
+    const action = mode === 'incoming' ? `<button class="btn primary" data-respond-friend="${person.id}" data-friend-accept="true">Aceptar</button><button class="btn ghost" data-respond-friend="${person.id}" data-friend-accept="false">Rechazar</button>` : `<button class="btn ghost" data-remove-friend="${person.id}">Eliminar</button><button class="btn ghost" data-block-user="${person.id}">Bloquear</button>`;
+    return `<article class="duel-row"><i class="avatar">${esc(person.avatar || '🩺')}</i><div><h3>${esc(person.display_name)}</h3><p>${esc(person.friend_code)}</p></div><div class="actions">${action}</div></article>`;
+  }
+  function profileView() {
+    const p = profile(), card = p.card || {}, photo = card.photoUrl && /^https?:\/\//i.test(card.photoUrl) ? `<img class="profile-photo" src="${esc(card.photoUrl)}" alt="Foto de perfil de ${esc(p.name)}">` : `<i class="profile-photo avatar">${esc(p.avatar)}</i>`;
+    return `<section class="identity-card"><div class="identity-header"><span>ACTA DE NACIMIENTO</span><b>RESIDENTE RABANITOS</b></div><div class="identity-main">${photo}<div><span class="eyebrow">Nombre clínico</span><h2>${esc(p.name)}</h2><p>${esc(card.bio || 'Aprendiendo pediatría, una pregunta a la vez.')}</p></div></div><div class="identity-grid"><span><b>Código</b>${esc(card.friendCode || 'Generando…')}</span><span><b>Especialidad</b>Pediatría</span><span><b>Miembro desde</b>${new Date(p.createdAt || Date.now()).toLocaleDateString()}</span></div></section><section class="panel"><span class="eyebrow">Editar mi ficha</span><h2>Tu tarjeta personal</h2><p style="margin-top:7px;color:var(--muted)">La foto es opcional y puedes usar una URL pública. Tu correo nunca se muestra aquí.</p><label class="field">Nombre visible<input id="profileName" maxlength="60" value="${esc(p.name)}"></label><label class="field">Foto de perfil (URL opcional)<input id="profilePhoto" type="url" maxlength="1000" value="${esc(card.photoUrl || '')}" placeholder="https://…"></label><label class="field">Una línea sobre ti<textarea id="profileBio" maxlength="180" placeholder="Ej. Residente de pediatría, amante del café y las guardias bien organizadas.">${esc(card.bio || '')}</textarea></label><button class="toe-print" id="saveProfileCard"><span>🦶</span><strong>Confirmar con la huellita del dedo gordo</strong><small>Es un botón divertido: no capturamos ni guardamos huellas, biometría ni información privada.</small></button>${state.profileSaved ? '<p class="notice" style="margin-top:12px">Ficha guardada. Tu información privada permanece privada.</p>' : ''}</section>`;
   }
   function chatView() {
     const messages = state.social?.messages || [];
@@ -110,15 +125,17 @@
     const p = socialProfile(), client = cloudClient();
     if (!p || !client || (state.socialLoading || (state.socialLoaded && !force))) return;
     state.socialLoading = true;
-    const [leaderboard, duels, inventory, gifts, trades, messages] = await Promise.all([
-      client.rpc('get_leaderboard'), client.rpc('my_duels'), client.rpc('my_ferchy_inventory'), client.rpc('my_ferchy_gifts'), client.rpc('my_card_trades'),
+    const [leaderboard, duels, inventory, gifts, trades, connections, blocked, messages] = await Promise.all([
+      client.rpc('get_leaderboard', { p_scope: state.rankScope || 'all' }), client.rpc('my_duels'), client.rpc('my_ferchy_inventory'), client.rpc('my_ferchy_gifts'), client.rpc('my_card_trades'), client.rpc('my_connections'), client.rpc('my_blocked_users'),
       client.from('chat_messages').select('id,sender_id,sender_name,sender_avatar,body,created_at').order('created_at', { ascending: true }).limit(50)
     ]);
     state.socialLoading = false;
-    const responses = [leaderboard, duels, inventory, gifts, trades, messages];
+    const responses = [leaderboard, duels, inventory, gifts, trades, connections, blocked, messages];
     const failure = responses.find(r => r.error);
     if (failure) { state.socialError = 'Activa las funciones sociales ejecutando el archivo db/schema.sql actualizado en Supabase. ' + statusText(failure.error); state.socialLoaded = true; render(); return; }
-    state.social = { leaderboard: leaderboard.data || [], duels: duels.data || [], inventory: (inventory.data || []).map(hydrateCard), gifts: gifts.data || [], trades: trades.data || [], messages: messages.data || [] };
+    state.social = { leaderboard: leaderboard.data || [], duels: duels.data || [], inventory: (inventory.data || []).map(hydrateCard), gifts: gifts.data || [], trades: trades.data || [], connections: connections.data || [], blocked: blocked.data || [], messages: messages.data || [] };
+    const self = state.social.leaderboard.find(user => user.id === p.cloud.userId);
+    if (self?.friend_code && p.card?.friendCode !== self.friend_code) { p.card.friendCode = self.friend_code; save(p); }
     state.socialError = '';
     state.socialLoaded = true;
     subscribeRealtime(client);
@@ -184,18 +201,51 @@
     await loadSocial(true);
   }
   async function acceptTrade(id) { const { error } = await cloudClient().rpc('accept_card_trade', { p_trade_id: id }); if (error) { state.socialError = statusText(error); render(); return; } await loadSocial(true); }
+  async function requestFriend(code) {
+    const value = (code || document.querySelector('#friendCodeInput')?.value || '').trim();
+    if (!value) { state.socialError = 'Escribe un código de amistad.'; render(); return; }
+    const { error } = await cloudClient().rpc('send_friend_request', { p_friend_code: value });
+    if (error) { state.socialError = statusText(error); render(); return; }
+    state.socialError = ''; await loadSocial(true);
+  }
+  async function respondFriend(personId, accept) {
+    const request = (state.social?.connections || []).find(x => x.id === personId && x.relationship === 'incoming');
+    if (!request) return;
+    const { error } = await cloudClient().rpc('respond_friend_request_for', { p_requester_id: personId, p_accept: accept });
+    if (error) { state.socialError = statusText(error); render(); return; }
+    await loadSocial(true);
+  }
+  async function removeFriend(id) { const { error } = await cloudClient().rpc('remove_friend', { p_friend_id: id }); if (error) { state.socialError = statusText(error); render(); return; } await loadSocial(true); }
+  async function blockUser(id) { if (!confirm('¿Bloquear esta cuenta? Se eliminará la amistad y ya no podrán interactuar.')) return; const { error } = await cloudClient().rpc('block_user', { p_user_id: id }); if (error) { state.socialError = statusText(error); render(); return; } await loadSocial(true); }
+  async function unblockUser(id) { const { error } = await cloudClient().rpc('unblock_user', { p_user_id: id }); if (error) { state.socialError = statusText(error); render(); return; } await loadSocial(true); }
+  async function saveProfileCard() {
+    const p = profile(), name = document.querySelector('#profileName')?.value.trim(), photoUrl = document.querySelector('#profilePhoto')?.value.trim() || '', bio = document.querySelector('#profileBio')?.value.trim() || '';
+    if (!name || name.length < 2) { state.socialError = 'El nombre debe tener al menos 2 caracteres.'; render(); return; }
+    if (photoUrl && !/^https?:\/\//i.test(photoUrl)) { state.socialError = 'La foto debe usar una URL que comience con https:// o http://.'; render(); return; }
+    const { error } = await cloudClient().from('profiles').update({ display_name: name, photo_url: photoUrl, bio }).eq('id', p.cloud.userId);
+    if (error) { state.socialError = statusText(error); render(); return; }
+    p.name = name; p.card = { ...(p.card || {}), photoUrl, bio }; save(p); state.profileSaved = true; state.socialError = ''; render();
+  }
   window.bindSocialExtras = function () {
     if (state.page === 'social' && !state.socialLoaded && !state.socialLoading) loadSocial(false);
     document.querySelectorAll('[data-social-tab]').forEach(button => button.onclick = () => { state.socialTab = button.dataset.socialTab; render(); });
+    document.querySelectorAll('[data-rank-scope]').forEach(button => button.onclick = () => { state.rankScope = button.dataset.rankScope; state.socialLoaded = false; loadSocial(true); });
     document.querySelectorAll('[data-album-topic]').forEach(button => button.onclick = () => { state.albumTopic = button.dataset.albumTopic; render(); });
     document.querySelectorAll('[data-challenge]').forEach(button => button.onclick = () => createDuel(button.dataset.challenge));
     document.querySelectorAll('[data-accept-duel]').forEach(button => button.onclick = () => acceptDuel(button.dataset.acceptDuel));
     document.querySelectorAll('[data-play-duel]').forEach(button => button.onclick = () => playDuel(button.dataset.playDuel));
     document.querySelectorAll('[data-gift-card]').forEach(button => button.onclick = () => giftCard(button.dataset.giftCard));
     document.querySelectorAll('[data-accept-trade]').forEach(button => button.onclick = () => acceptTrade(button.dataset.acceptTrade));
+    document.querySelectorAll('[data-request-friend]').forEach(button => button.onclick = () => requestFriend(button.dataset.requestFriend));
+    document.querySelectorAll('[data-respond-friend]').forEach(button => button.onclick = () => respondFriend(button.dataset.respondFriend, button.dataset.friendAccept === 'true'));
+    document.querySelectorAll('[data-remove-friend]').forEach(button => button.onclick = () => removeFriend(button.dataset.removeFriend));
+    document.querySelectorAll('[data-block-user]').forEach(button => button.onclick = () => blockUser(button.dataset.blockUser));
+    document.querySelectorAll('[data-unblock-user]').forEach(button => button.onclick = () => unblockUser(button.dataset.unblockUser));
     const refresh = document.querySelector('#refreshSocial'); if (refresh) refresh.onclick = () => loadSocial(true);
     const form = document.querySelector('#chatForm'); if (form) form.onsubmit = event => { event.preventDefault(); sendChat(); };
     const trade = document.querySelector('#offerTrade'); if (trade) trade.onclick = offerTrade;
+    const friend = document.querySelector('#sendFriendRequest'); if (friend) friend.onclick = () => requestFriend();
+    const profileButton = document.querySelector('#saveProfileCard'); if (profileButton) profileButton.onclick = saveProfileCard;
   };
   window.socialPage = socialPage;
 })();

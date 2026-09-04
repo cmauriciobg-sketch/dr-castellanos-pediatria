@@ -588,6 +588,294 @@ do $$ begin
     alter publication supabase_realtime add table public.chat_messages;
   end if;
 end $$;
+
+-- Red de amistades y ficha de residente. El código es público y no contiene datos personales.
+create or replace function public.new_friend_code()
+returns text
+language sql
+volatile
+as $$
+  select 'RAB-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+$$;
+
+alter table public.profiles
+  add column if not exists friend_code text,
+  add column if not exists bio text not null default '',
+  add column if not exists photo_url text not null default '';
+
+update public.profiles set friend_code = public.new_friend_code() where friend_code is null;
+alter table public.profiles alter column friend_code set default public.new_friend_code();
+alter table public.profiles alter column friend_code set not null;
+create unique index if not exists profiles_friend_code_key on public.profiles(friend_code);
+
+-- La persona puede editar solo los datos visibles de su propia ficha, nunca su rol o estado.
+grant update (display_name, avatar, progress, bio, photo_url) on public.profiles to authenticated;
+
+create table if not exists public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references auth.users(id) on delete cascade,
+  addressee_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  check (requester_id <> addressee_id)
+);
+create unique index if not exists friendships_pair_key on public.friendships(requester_id, addressee_id);
+
+create table if not exists public.blocked_users (
+  blocker_id uuid not null references auth.users(id) on delete cascade,
+  blocked_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key(blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+
+alter table public.friendships enable row level security;
+alter table public.blocked_users enable row level security;
+
+create or replace function public.is_interaction_blocked(p_other_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.blocked_users
+    where (blocker_id = auth.uid() and blocked_id = p_other_id)
+       or (blocker_id = p_other_id and blocked_id = auth.uid())
+  );
+$$;
+
+revoke all on function public.is_interaction_blocked(uuid) from public;
+grant execute on function public.is_interaction_blocked(uuid) to authenticated;
+
+create or replace function public.send_friend_request(p_friend_code text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare target_id uuid;
+declare request_id uuid;
+begin
+  if not public.is_active_user() then raise exception 'Tu cuenta no tiene acceso a amistades.'; end if;
+  select id into target_id from public.profiles where upper(friend_code) = upper(trim(p_friend_code)) and is_active;
+  if not found then raise exception 'No encontramos ese código de amistad.'; end if;
+  if target_id = auth.uid() then raise exception 'Ese es tu propio código.'; end if;
+  if public.is_interaction_blocked(target_id) then raise exception 'No puedes interactuar con esta cuenta.'; end if;
+  if exists (select 1 from public.friendships where status = 'accepted' and auth.uid() in (requester_id, addressee_id) and target_id in (requester_id, addressee_id)) then
+    raise exception 'Ya son amigos.';
+  end if;
+  if exists (select 1 from public.friendships where status = 'pending' and requester_id = target_id and addressee_id = auth.uid()) then
+    update public.friendships set status = 'accepted', responded_at = now()
+    where requester_id = target_id and addressee_id = auth.uid()
+    returning id into request_id;
+    return request_id;
+  end if;
+  if exists (select 1 from public.friendships where status = 'pending' and requester_id = auth.uid() and addressee_id = target_id) then
+    raise exception 'La solicitud ya fue enviada.';
+  end if;
+  delete from public.friendships
+  where status = 'rejected' and auth.uid() in (requester_id, addressee_id) and target_id in (requester_id, addressee_id);
+  insert into public.friendships(requester_id, addressee_id) values (auth.uid(), target_id) returning id into request_id;
+  return request_id;
+end;
+$$;
+
+create or replace function public.respond_friend_request(p_request_id uuid, p_accept boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.friendships set status = case when p_accept then 'accepted' else 'rejected' end, responded_at = now()
+  where id = p_request_id and addressee_id = auth.uid() and status = 'pending';
+  if not found then raise exception 'La solicitud ya no está disponible.'; end if;
+end;
+$$;
+
+create or replace function public.respond_friend_request_for(p_requester_id uuid, p_accept boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.friendships set status = case when p_accept then 'accepted' else 'rejected' end, responded_at = now()
+  where requester_id = p_requester_id and addressee_id = auth.uid() and status = 'pending';
+  if not found then raise exception 'La solicitud ya no está disponible.'; end if;
+end;
+$$;
+
+create or replace function public.remove_friend(p_friend_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.friendships
+  where status = 'accepted' and auth.uid() in (requester_id, addressee_id) and p_friend_id in (requester_id, addressee_id);
+  if not found then raise exception 'No encontramos esa amistad.'; end if;
+end;
+$$;
+
+create or replace function public.block_user(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_user_id = auth.uid() then raise exception 'No puedes bloquearte a ti mismo.'; end if;
+  if not exists (select 1 from public.profiles where id = p_user_id) then raise exception 'Usuario no encontrado.'; end if;
+  insert into public.blocked_users(blocker_id, blocked_id) values (auth.uid(), p_user_id) on conflict do nothing;
+  delete from public.friendships where auth.uid() in (requester_id, addressee_id) and p_user_id in (requester_id, addressee_id);
+end;
+$$;
+
+create or replace function public.unblock_user(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.blocked_users where blocker_id = auth.uid() and blocked_id = p_user_id;
+  if not found then raise exception 'Ese usuario no estaba bloqueado.'; end if;
+end;
+$$;
+
+create or replace function public.my_connections()
+returns table (id uuid, display_name text, avatar text, friend_code text, relationship text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select other.id, other.display_name::text, other.avatar::text, other.friend_code::text,
+    case when f.status = 'accepted' then 'friend' when f.requester_id = auth.uid() then 'outgoing' else 'incoming' end
+  from public.friendships f
+  join public.profiles other on other.id = case when f.requester_id = auth.uid() then f.addressee_id else f.requester_id end
+  where auth.uid() in (f.requester_id, f.addressee_id) and f.status in ('pending', 'accepted')
+  order by other.display_name;
+$$;
+
+create or replace function public.my_blocked_users()
+returns table (id uuid, display_name text, avatar text, friend_code text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.display_name::text, p.avatar::text, p.friend_code::text
+  from public.blocked_users b join public.profiles p on p.id = b.blocked_id
+  where b.blocker_id = auth.uid()
+  order by p.display_name;
+$$;
+
+revoke all on function public.send_friend_request(text) from public;
+revoke all on function public.respond_friend_request(uuid, boolean) from public;
+revoke all on function public.respond_friend_request_for(uuid, boolean) from public;
+revoke all on function public.remove_friend(uuid) from public;
+revoke all on function public.block_user(uuid) from public;
+revoke all on function public.unblock_user(uuid) from public;
+revoke all on function public.my_connections() from public;
+revoke all on function public.my_blocked_users() from public;
+grant execute on function public.send_friend_request(text) to authenticated;
+grant execute on function public.respond_friend_request(uuid, boolean) to authenticated;
+grant execute on function public.respond_friend_request_for(uuid, boolean) to authenticated;
+grant execute on function public.remove_friend(uuid) to authenticated;
+grant execute on function public.block_user(uuid) to authenticated;
+grant execute on function public.unblock_user(uuid) to authenticated;
+grant execute on function public.my_connections() to authenticated;
+grant execute on function public.my_blocked_users() to authenticated;
+
+-- El ranking se adapta a Comunidad o Amigos y nunca muestra cuentas bloqueadas.
+drop function if exists public.get_leaderboard();
+create function public.get_leaderboard(p_scope text default 'all')
+returns table (
+  rank bigint, id uuid, display_name text, avatar text, friend_code text, xp integer,
+  streak_current integer, streak_best integer, medals integer, relationship text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with base as (
+    select p.id, p.display_name::text, p.avatar::text, p.friend_code::text,
+      coalesce((p.progress->>'xp')::integer, 0) as xp,
+      coalesce((p.progress->'streak'->>'current')::integer, 0) as streak_current,
+      coalesce((p.progress->'streak'->>'best')::integer, 0) as streak_best,
+      (case when coalesce((p.progress->'stats'->>'quizzes')::integer, 0) >= 1 then 1 else 0 end +
+       case when coalesce((p.progress->'stats'->>'perfect')::integer, 0) >= 1 then 1 else 0 end +
+       case when coalesce((p.progress->'stats'->>'perfectHigh')::integer, 0) >= 1 then 1 else 0 end +
+       case when coalesce((p.progress->'streak'->>'current')::integer, 0) >= 7 then 1 else 0 end +
+       case when coalesce((p.progress->'stats'->>'memory')::integer, 0) >= 1 then 1 else 0 end +
+       case when coalesce((p.progress->'stats'->>'sprint')::integer, 0) >= 1 then 1 else 0 end)::integer as medals,
+      case
+        when p.id = auth.uid() then 'self'
+        when exists (select 1 from public.friendships f where f.status = 'accepted' and auth.uid() in (f.requester_id, f.addressee_id) and p.id in (f.requester_id, f.addressee_id)) then 'friend'
+        when exists (select 1 from public.friendships f where f.status = 'pending' and f.requester_id = auth.uid() and f.addressee_id = p.id) then 'outgoing'
+        when exists (select 1 from public.friendships f where f.status = 'pending' and f.addressee_id = auth.uid() and f.requester_id = p.id) then 'incoming'
+        else 'none'
+      end as relationship
+    from public.profiles p
+    where p.is_active and not public.is_interaction_blocked(p.id)
+  ), visible as (
+    select * from base where p_scope = 'all' or relationship in ('self', 'friend')
+  )
+  select row_number() over (order by xp desc, medals desc, streak_current desc, display_name),
+    id, display_name, avatar, friend_code, xp, streak_current, streak_best, medals, relationship
+  from visible
+  order by xp desc, medals desc, streak_current desc, display_name;
+$$;
+
+revoke all on function public.get_leaderboard(text) from public;
+grant execute on function public.get_leaderboard(text) to authenticated;
+
+drop policy if exists "Active users can read chat" on public.chat_messages;
+create policy "Active users can read chat"
+  on public.chat_messages for select to authenticated
+  using (public.is_active_user() and not public.is_interaction_blocked(sender_id));
+
+-- Bloquear elimina las rutas de interacción directa existentes.
+create or replace function public.create_duel(p_opponent_id uuid, p_topic text, p_level text)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare duel_id uuid;
+begin
+  if not public.is_active_user() then raise exception 'Tu cuenta no tiene acceso a los retos.'; end if;
+  if p_opponent_id = auth.uid() then raise exception 'No puedes retarte a ti mismo.'; end if;
+  if public.is_interaction_blocked(p_opponent_id) then raise exception 'No puedes interactuar con esta cuenta.'; end if;
+  if p_topic not in ('atresia_esofagica', 'atresia_intestinal', 'fisiologia_pulmonar', 'cardiopatias', 'adenopatias') then raise exception 'Tema no válido.'; end if;
+  if p_level not in ('bajo', 'medio', 'alto') then raise exception 'Nivel no válido.'; end if;
+  if not exists (select 1 from public.profiles where id = p_opponent_id and is_active) then raise exception 'La persona retada no está disponible.'; end if;
+  insert into public.duels(host_id, opponent_id, topic, level) values (auth.uid(), p_opponent_id, p_topic, p_level) returning id into duel_id;
+  return duel_id;
+end;
+$$;
+
+create or replace function public.send_ferchy_gift(p_card_id text, p_recipient_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_active_user() then raise exception 'Tu cuenta no tiene acceso a los regalos.'; end if;
+  if p_recipient_id = auth.uid() then raise exception 'El regalo debe ser para otra persona.'; end if;
+  if public.is_interaction_blocked(p_recipient_id) then raise exception 'No puedes interactuar con esta cuenta.'; end if;
+  if not exists (select 1 from public.profiles where id = p_recipient_id and is_active) then raise exception 'La persona destinataria no está disponible.'; end if;
+  update public.user_ferchy_cards set quantity = quantity - 1, updated_at = now() where user_id = auth.uid() and card_id = p_card_id and quantity > 1;
+  if not found then raise exception 'Solo puedes regalar una carta repetida.'; end if;
+  insert into public.user_ferchy_cards(user_id, card_id, quantity, updated_at) values (p_recipient_id, p_card_id, 1, now())
+  on conflict (user_id, card_id) do update set quantity = public.user_ferchy_cards.quantity + 1, updated_at = now();
+  insert into public.ferchy_gifts(sender_id, recipient_id, card_id) values (auth.uid(), p_recipient_id, p_card_id);
+end;
+$$;
 do $$ begin
   if not exists (
     select 1 from pg_publication_tables

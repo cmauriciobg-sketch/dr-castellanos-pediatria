@@ -33,6 +33,9 @@ El archivo `db/schema.sql` también instala un panel de administración. Puede v
 La comunidad necesita la misma cuenta gratuita de Supabase; no existe ningún cobro ni contenido bloqueado para estudiar. Ejecuta nuevamente el archivo completo `db/schema.sql` en Supabase para instalar estas funciones:
 
 - **Ranking:** XP, racha y medallas de las cuentas activas.
+- **Red de amistad:** cada cuenta recibe un código corto `RAB-XXXXXX`; permite enviar, aceptar, rechazar o eliminar amistades. El ranking puede mostrar a toda la comunidad o solo amigos.
+- **Bloqueo:** bloquear elimina la amistad y evita retos, regalos e interacción visible en el chat entre ambas cuentas. Se puede desbloquear desde el panel de amistades.
+- **Ficha personal:** una tarjeta de presentación con foto por URL opcional, nombre, descripción y código de amistad. El botón de “huellita del dedo gordo” es un gesto visual: no captura ni almacena biometría, cámara ni datos privados.
 - **Chat en tiempo real:** para conversación académica; no admite datos identificables de pacientes ni sustituye canales de urgencia.
 - **Modo VS:** un reto amistoso de 10 preguntas. Gana el mayor puntaje y, en empate, el menor tiempo.
 - **Ferchy Cards:** 20 cartas por cada módulo, con 12 comunes, 6 normales y 2 raras doradas. Las raras solo pueden aparecer al completar un nivel alto.
