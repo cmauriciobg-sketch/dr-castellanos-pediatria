@@ -45,6 +45,49 @@ create trigger profiles_set_updated_at
   before update on public.profiles
   for each row execute function public.set_updated_at();
 
+-- Las escrituras del perfil pasan por funciones seguras para evitar problemas de permisos en el registro.
+create or replace function public.bootstrap_profile(p_display_name text, p_avatar text, p_progress jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Necesitas una sesión activa.'; end if;
+  if char_length(trim(coalesce(p_display_name, ''))) not between 2 and 60 then raise exception 'Nombre no válido.'; end if;
+  insert into public.profiles(id, display_name, avatar, progress)
+  values (auth.uid(), trim(p_display_name), coalesce(nullif(trim(p_avatar), ''), '🩺'), coalesce(p_progress, '{}'::jsonb))
+  on conflict (id) do update set
+    display_name = excluded.display_name,
+    avatar = excluded.avatar,
+    progress = excluded.progress;
+end;
+$$;
+
+create or replace function public.sync_profile_progress(p_display_name text, p_avatar text, p_progress jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Necesitas una sesión activa.'; end if;
+  update public.profiles set
+    display_name = trim(p_display_name),
+    avatar = coalesce(nullif(trim(p_avatar), ''), '🩺'),
+    progress = coalesce(p_progress, '{}'::jsonb)
+  where id = auth.uid();
+  if not found then
+    perform public.bootstrap_profile(p_display_name, p_avatar, p_progress);
+  end if;
+end;
+$$;
+
+revoke all on function public.bootstrap_profile(text, text, jsonb) from public;
+revoke all on function public.sync_profile_progress(text, text, jsonb) from public;
+grant execute on function public.bootstrap_profile(text, text, jsonb) to authenticated;
+grant execute on function public.sync_profile_progress(text, text, jsonb) to authenticated;
+
 -- Administración: una cuenta puede bloquear el acceso de otra sin borrar su historial.
 alter table public.profiles
   add column if not exists role text not null default 'student'
