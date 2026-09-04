@@ -14,10 +14,19 @@ Aplicación web/PWA gratuita para el estudio clínico de Pediatría. Incluye cue
 1. Crea un repositorio en GitHub y sube esta carpeta.
 2. Crea un proyecto en Supabase. En **SQL Editor**, ejecuta una vez el archivo `db/schema.sql`.
 3. En Supabase, abre **Connect** y copia el **Project URL** y la **Publishable key**. Pégalos en `supabase-config.js`.
-4. En **Authentication > URL Configuration**, agrega `https://rpedia.cmauriciobg.chatgpt.site` como *Site URL* y *Redirect URL*.
+4. En **Authentication > URL Configuration**, agrega `https://dr-castellanos-pediatria.vercel.app` como *Site URL* y *Redirect URL*.
 5. Importa el repositorio en Vercel. Elige el preset **Other**: no requiere compilación y publica `index.html` como sitio estático.
 
 La URL y la Publishable key son datos públicos de cliente. Nunca copies una `service_role` o *secret key* en el navegador, en GitHub ni en este archivo. Las reglas de `db/schema.sql` hacen que cada persona solo pueda leer y editar su propio perfil.
+
+## Superusuario
+
+El archivo `db/schema.sql` también instala un panel de administración. Puede ver perfiles registrados y **dar de baja** o reactivar cuentas; la baja bloquea el acceso a la app y conserva el historial de estudio.
+
+1. Crea e inicia sesión con tu cuenta en la app para que se genere tu perfil.
+2. Ejecuta la versión actual de `db/schema.sql` en el **SQL Editor** de Supabase (es seguro volver a ejecutarla).
+3. Cambia `tu-correo@ejemplo.com` por el correo de tu cuenta y ejecuta la última consulta comentada del archivo.
+4. Cierra sesión e ingresa de nuevo. Verás el icono de corona y la sección **Usuarios**.
 
 ## Uso local
 
