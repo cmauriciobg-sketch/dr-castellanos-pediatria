@@ -28,6 +28,18 @@ El archivo `db/schema.sql` también instala un panel de administración. Puede v
 3. Cambia `tu-correo@ejemplo.com` por el correo de tu cuenta y ejecuta la última consulta comentada del archivo.
 4. Cierra sesión e ingresa de nuevo. Verás el icono de corona y la sección **Usuarios**.
 
+## Comunidad Rabanitos y Ferchy Cards
+
+La comunidad necesita la misma cuenta gratuita de Supabase; no existe ningún cobro ni contenido bloqueado para estudiar. Ejecuta nuevamente el archivo completo `db/schema.sql` en Supabase para instalar estas funciones:
+
+- **Ranking:** XP, racha y medallas de las cuentas activas.
+- **Chat en tiempo real:** para conversación académica; no admite datos identificables de pacientes ni sustituye canales de urgencia.
+- **Modo VS:** un reto amistoso de 10 preguntas. Gana el mayor puntaje y, en empate, el menor tiempo.
+- **Ferchy Cards:** 20 cartas por cada módulo, con 12 comunes, 6 normales y 2 raras doradas. Las raras solo pueden aparecer al completar un nivel alto.
+- **Álbum, regalos e intercambios:** las cartas repetidas pueden regalarse o proponerse a cambio de otra repetida.
+
+Las reglas de Supabase impiden que una persona modifique el inventario, los retos o el progreso de otra directamente. Las funciones del servidor validan la identidad y conservan las operaciones de regalos e intercambios.
+
 ## Uso local
 
 Para probar instalación PWA y caché offline, sirve la carpeta por HTTP:
